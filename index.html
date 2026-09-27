@@ -106,9 +106,18 @@
     End-Effector
     <label class="auto-toggle"><input type="checkbox" id="auto-roam" checked> Auto</label>
   </h1>
-  <div class="row align-center"><label>X</label><input type="range" id="sx" min="-26.0" max="26.0" step="0.01" value="0"><b id="vx">0.00</b></div>
-  <div class="row align-center"><label>Y</label><input type="range" id="sy" min="0.5" max="40.0" step="0.01" value="10.0"><b id="vy">10.00</b></div>
-  <div class="row align-center"><label>Z</label><input type="range" id="sz" min="-26.0" max="26.0" step="0.01" value="-20.0"><b id="vz">-20.00</b></div>
+  <!-- Sliders container that dynamically hides when Auto is ON -->
+  <div id="sliders-container" style="display: none;">
+    <div class="row align-center"><label>X</label><input type="range" id="sx" min="-26.0" max="26.0" step="0.01" value="0"><b id="vx">0.00</b></div>
+    <div class="row align-center"><label>Y</label><input type="range" id="sy" min="0.5" max="40.0" step="0.01" value="10.0"><b id="vy">10.00</b></div>
+    <div class="row align-center"><label>Z</label><input type="range" id="sz" min="-26.0" max="26.0" step="0.01" value="-20.0"><b id="vz">-20.00</b></div>
+  </div>
+  
+  <h1 style="margin: 4px -16px 12px; padding: 12px 16px; border-top: 1px solid var(--line); cursor: default;">
+    Subject (Wall-E)
+    <label class="auto-toggle"><input type="checkbox" id="walle-auto" checked> Auto</label>
+  </h1>
+  <div style="font-size: 11px; color: var(--muted); text-align: center; margin-bottom: 0px;">Manual Control: Use W, A, S, D</div>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -151,12 +160,15 @@
   ground.rotation.x = -Math.PI/2; ground.receiveShadow = true; scene.add(ground);
   let grid = new THREE.GridHelper(60, 60, 0xadb5bd, 0xdee2e6); grid.position.y = 0.01; scene.add(grid);
 
-  // --- AUTO ROAM STATE ---
+  // --- UI STATE & LOGIC ---
+  const sx = document.getElementById('sx'), sy = document.getElementById('sy'), sz = document.getElementById('sz');
+  const vx = document.getElementById('vx'), vy = document.getElementById('vy'), vz = document.getElementById('vz');
+  
+  // End-Effector Auto Roam
   let isAutoRoam = true; 
   const eeTargetPos = new THREE.Vector3();
   const autoRoamCb = document.getElementById('auto-roam');
-  const sx = document.getElementById('sx'), sy = document.getElementById('sy'), sz = document.getElementById('sz');
-  const vx = document.getElementById('vx'), vy = document.getElementById('vy'), vz = document.getElementById('vz');
+  const slidersContainer = document.getElementById('sliders-container');
 
   function pickNewEETarget() {
     eeTargetPos.set((Math.random() - 0.5) * 40, Math.random() * 20 + 5, (Math.random() - 0.5) * 40);
@@ -166,16 +178,42 @@
   function setAutoRoam(state) {
     isAutoRoam = state;
     autoRoamCb.checked = state;
+    slidersContainer.style.display = state ? 'none' : 'block'; 
     if (isAutoRoam) pickNewEETarget();
     if (sx && sy && sz) updateVirtualScreen(parseFloat(sx.value), parseFloat(sy.value), parseFloat(sz.value));
   }
   autoRoamCb.addEventListener('change', (e) => setAutoRoam(e.target.checked));
+  slidersContainer.style.display = isAutoRoam ? 'none' : 'block'; // Set initial state
 
   const onPosSlide = () => {
     if (isAutoRoam) setAutoRoam(false); 
     updateEndEffector(parseFloat(sx.value), parseFloat(sy.value), parseFloat(sz.value));
   };
   [sx,sy,sz].forEach(el => el.addEventListener('input', onPosSlide));
+
+  // Wall-E Auto Roam & WASD Controls
+  let isWalleAuto = true;
+  const walleAutoCb = document.getElementById('walle-auto');
+  
+  function setWalleAuto(state) {
+      isWalleAuto = state;
+      walleAutoCb.checked = state;
+      if (sx && sy && sz) updateVirtualScreen(parseFloat(sx.value), parseFloat(sy.value), parseFloat(sz.value));
+  }
+  walleAutoCb.addEventListener('change', (e) => setWalleAuto(e.target.checked));
+
+  const keys = { w: false, a: false, s: false, d: false };
+  window.addEventListener('keydown', (e) => {
+      const key = e.key.toLowerCase();
+      if (keys.hasOwnProperty(key)) {
+          keys[key] = true;
+          if (isWalleAuto) setWalleAuto(false); 
+      }
+  });
+  window.addEventListener('keyup', (e) => {
+      const key = e.key.toLowerCase();
+      if (keys.hasOwnProperty(key)) keys[key] = false;
+  });
 
   // --- SAFE ROUND RECTANGLE HELPER ---
   function drawSafeRoundRect(ctx, x, y, width, height, radius) {
@@ -192,11 +230,11 @@
 
   // --- VIRTUAL DISPLAY 1 (COMPACT FLOATING HUD) ---
   const vCanvas = document.createElement('canvas');
-  vCanvas.width = 1024; vCanvas.height = 440;
+  vCanvas.width = 1024; vCanvas.height = 560; 
   const ctx = vCanvas.getContext('2d');
   const vTexture = new THREE.CanvasTexture(vCanvas);
   
-  const virtualScreenGeo = new THREE.PlaneGeometry(6.4, 3.6); 
+  const virtualScreenGeo = new THREE.PlaneGeometry(6.4, 3.5); 
   const virtualScreenMat = new THREE.MeshBasicMaterial({ map: vTexture, transparent: true, opacity: 0.95, side: THREE.DoubleSide });
   const virtualScreen = new THREE.Mesh(virtualScreenGeo, virtualScreenMat);
   virtualScreen.position.set(34, 15, 0); 
@@ -207,17 +245,16 @@
     ctx.clearRect(0, 0, vCanvas.width, vCanvas.height);
     ctx.save(); ctx.scale(2, 2);
     
+    // Main UI Box
     ctx.fillStyle = '#16191d'; ctx.strokeStyle = '#2a2f36'; ctx.lineWidth = 2; 
-    drawSafeRoundRect(ctx, 0, 0, 512, 220, 16);
+    drawSafeRoundRect(ctx, 0, 0, 512, 280, 16);
 
+    // Camera Header
     ctx.fillStyle = '#8b939c'; ctx.font = 'bold 16px sans-serif'; ctx.fillText('END-EFFECTOR', 20, 35);
-    
     ctx.font = 'bold 14px sans-serif'; ctx.fillStyle = '#e6e9ec'; ctx.fillText('Auto', 450, 35);
     ctx.strokeStyle = '#8b939c'; ctx.lineWidth = 1; ctx.fillStyle = isAutoRoam ? '#4fb0ff' : 'transparent';
     drawSafeRoundRect(ctx, 430, 23, 14, 14, 3);
-    if (isAutoRoam) {
-        ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(437, 30, 3, 0, Math.PI*2); ctx.fill(); 
-    }
+    if (isAutoRoam) { ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(437, 30, 3, 0, Math.PI*2); ctx.fill(); }
 
     ctx.beginPath(); ctx.moveTo(0, 55); ctx.lineTo(512, 55); ctx.strokeStyle = '#2a2f36'; ctx.stroke();
 
@@ -229,9 +266,24 @@
       ctx.fillStyle = '#4fb0ff'; ctx.beginPath(); ctx.arc(50 + (pct * 380), yOffset - 3, 10, 0, Math.PI*2); ctx.fill();
       ctx.fillStyle = '#e6e9ec'; ctx.font = '16px monospace'; ctx.textAlign = 'right'; ctx.fillText(val.toFixed(2), 492, yOffset); ctx.textAlign = 'left';
     }
-    drawSlider('X', x, -26, 26, 100);
-    drawSlider('Y', y, 0.5, 40, 145);
-    drawSlider('Z', z, -26, 26, 190);
+    
+    // Virtual screen ALWAYS shows sliders, even if HTML hides them
+    drawSlider('X', x, -26, 26, 95);
+    drawSlider('Y', y, 0.5, 40, 140);
+    drawSlider('Z', z, -26, 26, 185);
+
+    // Wall-E Section Divider
+    ctx.beginPath(); ctx.moveTo(0, 215); ctx.lineTo(512, 215); ctx.strokeStyle = '#2a2f36'; ctx.stroke();
+    ctx.fillStyle = '#8b939c'; ctx.font = 'bold 16px sans-serif'; ctx.fillText('SUBJECT (WALL-E)', 20, 245);
+    
+    // Wall-E Auto Toggle
+    ctx.font = 'bold 14px sans-serif'; ctx.fillStyle = '#e6e9ec'; ctx.fillText('Auto', 450, 245);
+    ctx.strokeStyle = '#8b939c'; ctx.lineWidth = 1; ctx.fillStyle = isWalleAuto ? '#4fb0ff' : 'transparent';
+    drawSafeRoundRect(ctx, 430, 233, 14, 14, 3);
+    if (isWalleAuto) { ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(437, 240, 3, 0, Math.PI*2); ctx.fill(); }
+
+    ctx.fillStyle = '#8b939c'; ctx.font = '12px sans-serif'; ctx.textAlign = 'center';
+    ctx.fillText('Manual Control: W, A, S, D keys', 256, 265);
 
     ctx.restore();
     vTexture.needsUpdate = true;
@@ -255,13 +307,13 @@
       side: THREE.DoubleSide 
   });
   const camScreen = new THREE.Mesh(camScreenGeo, camScreenMat);
-  camScreen.position.set(35, 15, -6.8); 
+  camScreen.position.set(34, 15, -6.8); 
   camScreen.rotation.y = (Math.PI / 2) - 0.25; 
   scene.add(camScreen);
 
   // --- VIRTUAL DISPLAY 3 (LIVE LAPTOP SCREEN) ---
   const liveRenderTarget = new THREE.WebGLRenderTarget(Math.floor(innerWidth / 2), Math.floor(innerHeight / 2));
-  const laptopScreenGeo = new THREE.PlaneGeometry(5.67, 3.3); 
+  const laptopScreenGeo = new THREE.PlaneGeometry(5.67, 3.35); 
   const laptopScreenMat = new THREE.MeshBasicMaterial({ map: liveRenderTarget.texture, side: THREE.DoubleSide });
   const liveLaptopScreen = new THREE.Mesh(laptopScreenGeo, laptopScreenMat);
   
@@ -368,7 +420,6 @@
   gimbal.add(payloadCamera);
 
   const loader = new THREE.GLTFLoader();
-  const mixers = []; 
   
   loader.load('panasonic_nv-m50_vhs_video_camera.glb', function(gltf) {
     const camModel = gltf.scene;
@@ -378,6 +429,7 @@
     eeFrame.visible = false; 
   });
 
+  let manMixer = null;
   loader.load('low_poly_man_working_at_a_table_with_a_laptop.glb', function(gltf) {
     const manModel = gltf.scene;
     manModel.position.set(45, 0, 0); 
@@ -386,14 +438,15 @@
     manModel.traverse((node) => { if (node.isMesh) { node.castShadow = true; node.receiveShadow = true; }});
     
     if (gltf.animations && gltf.animations.length) {
-      const mixer = new THREE.AnimationMixer(manModel);
-      mixer.clipAction(gltf.animations[0]).play();
-      mixers.push(mixer);
+      manMixer = new THREE.AnimationMixer(manModel);
+      manMixer.clipAction(gltf.animations[0]).play();
     }
     scene.add(manModel);
   });
 
   let walleModel = null;
+  let walleMixer = null;
+  let walleAction = null;
   const walleTargetPos = new THREE.Vector3();
   
   loader.load('wall-e-animated.glb', function(gltf) {
@@ -402,12 +455,12 @@
     walleModel.traverse((node) => { if (node.isMesh) { node.castShadow = true; node.receiveShadow = true; }});
     
     if (gltf.animations && gltf.animations.length) {
-      const mixer = new THREE.AnimationMixer(walleModel);
-      mixer.clipAction(gltf.animations[0]).play();
-      mixers.push(mixer);
+      walleMixer = new THREE.AnimationMixer(walleModel);
+      walleAction = walleMixer.clipAction(gltf.animations[0]);
+      walleAction.play();
     }
     
-    walleTargetPos.set((Math.random() - 0.5) * 25, 0, (Math.random() - 0.5) * 25);
+    walleTargetPos.set((Math.random() - 0.5) * 40, 0, (Math.random() - 0.5) * 40);
     scene.add(walleModel);
   });
   
@@ -557,7 +610,7 @@
     liveRenderTarget.setSize(Math.floor(innerWidth / 2), Math.floor(innerHeight / 2));
   });
 
-  // --- RENDER LOOP WITH ANIMATIONS & MULTI-CAMS ---
+  // --- RENDER LOOP WITH LOCAL MOVEMENT & ANIMATION SYNC ---
   const clock = new THREE.Clock();
   const walleDummy = new THREE.Object3D(); 
 
@@ -565,31 +618,69 @@
     requestAnimationFrame(animate); 
     
     const delta = clock.getDelta();
-    try {
-      mixers.forEach(mixer => mixer.update(delta));
-    } catch(e) {}
     
-    if (walleModel) {
-      const currentPos = walleModel.position;
-      const dist = currentPos.distanceTo(walleTargetPos);
+    if (manMixer) manMixer.update(delta);
+    
+    if (walleModel && walleMixer && walleAction) {
       
-      if (dist < 0.1) {
-        walleTargetPos.set((Math.random() - 0.5) * 30, 0, (Math.random() - 0.5) * 30);
+      if (!isWalleAuto) {
+          // Manual WASD Object-Centric (Local) Movement
+          let isMoving = false;
+          let moveSpeed = 0;
+          
+          if (keys.w) { moveSpeed = 10.0; isMoving = true; }
+          if (keys.s) { moveSpeed = -10.0; isMoving = true; }
+          
+          if (isMoving) {
+              // Play animation forward or backward
+              walleAction.timeScale = moveSpeed > 0 ? 1 : -1;
+              walleMixer.update(delta);
+              
+              // Car-like steering logic (only turn when moving)
+              let turnDirection = 0;
+              if (keys.a) turnDirection = 1;  // Inverted to fix left steering
+              if (keys.d) turnDirection = -1;   // Inverted to fix right steering
+              
+              if (turnDirection !== 0) {
+                  // Reversing steering direction when backing up for realistic car feel
+                  let steerFactor = moveSpeed > 0 ? 1 : -1;
+                  walleModel.rotateY(turnDirection * steerFactor * 2.0 * delta);
+              }
+              
+              // Move physically forward/backward in local space
+              walleModel.translateZ(moveSpeed * delta); // Inverted Z sign to fix W/S
+              
+              // Clamp to Grid
+              walleModel.position.x = Math.max(-30, Math.min(30, walleModel.position.x));
+              walleModel.position.z = Math.max(-30, Math.min(30, walleModel.position.z));
+          }
       } else {
-        const dir = new THREE.Vector3().subVectors(walleTargetPos, currentPos).normalize();
-        const step = 2.0 * delta; 
-        
-        if (step >= dist) {
-          walleModel.position.copy(walleTargetPos);
-        } else {
-          walleModel.position.add(dir.multiplyScalar(step));
-        }
-        
-        walleDummy.position.copy(currentPos);
-        walleDummy.lookAt(walleTargetPos);
-        walleModel.quaternion.slerp(walleDummy.quaternion, 5.0 * delta);
+          // Auto Roam Movement
+          walleAction.timeScale = 1;
+          walleMixer.update(delta);
+          
+          const currentPos = walleModel.position;
+          const dist = currentPos.distanceTo(walleTargetPos);
+          
+          if (dist < 0.1) {
+            walleTargetPos.set((Math.random() - 0.5) * 40, 0, (Math.random() - 0.5) * 40);
+          } else {
+            const dir = new THREE.Vector3().subVectors(walleTargetPos, currentPos).normalize();
+            const step = 2.0 * delta; 
+            
+            if (step >= dist) {
+              walleModel.position.copy(walleTargetPos);
+            } else {
+              walleModel.position.add(dir.multiplyScalar(step));
+            }
+            
+            walleDummy.position.copy(currentPos);
+            walleDummy.lookAt(walleTargetPos);
+            walleModel.quaternion.slerp(walleDummy.quaternion, 5.0 * delta);
+          }
       }
 
+      // SpiderCam continuously tracks Wall-E
       if (gimbal) {
         const targetFocus = walleModel.position.clone();
         targetFocus.y += 1.0; 
@@ -597,6 +688,7 @@
       }
     }
     
+    // Auto-Roam Logic for Camera Rig
     if (isAutoRoam) {
       const currentPos = endEffector.position;
       const dist = currentPos.distanceTo(eeTargetPos);
