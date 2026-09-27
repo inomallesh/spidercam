@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
 <title>SpiderCam Simulator</title>
 <style>
   :root {
@@ -13,7 +13,7 @@
     --bg: #f0f2f5; --panel: #ffffff; --line: #dee2e6; 
     --text: #212529; --muted: #6c757d; --accent: #0d6efd;
   }
-  html, body { height:100%; margin:0; background:var(--bg); color:var(--text); font-family:-apple-system,Segoe UI,Roboto,sans-serif; overflow:hidden; }
+  html, body { height:100%; margin:0; background:var(--bg); color:var(--text); font-family:-apple-system,Segoe UI,Roboto,sans-serif; overflow:hidden; touch-action: none; }
   #canvas-wrap { position:absolute; inset:0; }
   
   /* Transparent Top Menu Bar */
@@ -42,28 +42,33 @@
   #about-modal p { font-size: 13px; color: var(--muted); line-height: 1.6; margin-bottom: 20px; }
   .close-btn { background: var(--accent); color: #fff; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-weight: bold; width: 100%; }
   
+  /* Clean Zero-Gap HUD Panel */
   .ui-panel {
     position:absolute; background:var(--panel); border:1px solid var(--line); 
-    border-radius:10px; padding:14px 16px 18px; backdrop-filter:blur(6px); 
+    border-radius:10px; backdrop-filter:blur(6px); 
     box-shadow:0 8px 24px rgba(0,0,0,.15);
+    padding: 0; overflow: hidden; 
   }
   
   #hud { 
     top:64px; left:16px; width:280px;
     min-width:240px; max-width:400px; height:fit-content;
-    resize:horizontal; overflow:hidden;
     display:flex; flex-direction:column;
   }
-  #hud h1 { 
+  
+  .panel-header { 
     display: flex; justify-content: space-between; align-items: center;
     font-size:12px; letter-spacing:.08em; text-transform:uppercase; 
     color:var(--muted); font-weight:600;
-    margin:-14px -16px 16px; padding:12px 16px;
-    border-bottom:1px solid var(--line); 
-    cursor:grab; user-select:none;
+    margin: 0; padding: 14px 16px;
     background:rgba(0,0,0,0.02);
   }
-  #hud h1:active { cursor:grabbing; }
+  #drag-handle { cursor:grab; user-select:none; border-bottom: 1px solid var(--line); }
+  #drag-handle:active { cursor:grabbing; }
+
+  #walle-header { cursor: default; }
+
+  #sliders-container { padding: 16px; }
 
   .auto-toggle {
     font-size: 11px; display: flex; align-items: center; gap: 6px; 
@@ -82,6 +87,24 @@
   
   input[type=range] { -webkit-appearance:none; height:4px; border-radius:2px; background:var(--line); outline:none; }
   input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:14px; height:14px; border-radius:50%; background:var(--accent); cursor:pointer; }
+
+  /* Mobile Onscreen D-Pad */
+  #mobile-controls {
+    position: absolute; bottom: 24px; right: 24px;
+    display: grid; grid-template-columns: 50px 50px 50px; grid-template-rows: 50px 50px; gap: 6px;
+    z-index: 100;
+  }
+  .m-btn {
+    background: var(--panel); border: 1px solid var(--line); color: var(--text);
+    border-radius: 8px; font-size: 20px; display: flex; align-items: center; justify-content: center;
+    user-select: none; touch-action: none; cursor: pointer; opacity: 0.8;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  }
+  .m-btn:active { background: var(--accent); color: #fff; opacity: 1; }
+  #btn-up { grid-column: 2; grid-row: 1; }
+  #btn-left { grid-column: 1; grid-row: 2; }
+  #btn-down { grid-column: 2; grid-row: 2; }
+  #btn-right { grid-column: 3; grid-row: 2; }
 </style>
 </head>
 <body data-theme="light">
@@ -98,26 +121,31 @@
 <div id="about-modal">
   <h2>About SpiderCam</h2>
   <p>This is a 3D Cable-Driven Parallel Robot (CDPR) simulation. You can freely adjust the environment's anchor pillars, maneuver the central end-effector (camera), and watch it automatically track targets using real-time physics constraints.</p>
+  <p><strong>Manual Control:</strong> Toggle 'Auto' off in the Wall-E panel, then use the <b>W, A, S, D</b> keys (or the onscreen D-Pad) to drive him manually. Wall-E will properly collide with the pillars and desk!</p>
   <button class="close-btn" id="btn-close-about">Close</button>
 </div>
 
 <div id="hud" class="ui-panel">
-  <h1 id="drag-handle" title="Drag to move panel">
+  <h1 id="drag-handle" class="panel-header">
     End-Effector
     <label class="auto-toggle"><input type="checkbox" id="auto-roam" checked> Auto</label>
   </h1>
-  <!-- Sliders container that dynamically hides when Auto is ON -->
-  <div id="sliders-container" style="display: none;">
-    <div class="row align-center"><label>X</label><input type="range" id="sx" min="-26.0" max="26.0" step="0.01" value="0"><b id="vx">0.00</b></div>
-    <div class="row align-center"><label>Y</label><input type="range" id="sy" min="0.5" max="40.0" step="0.01" value="10.0"><b id="vy">10.00</b></div>
-    <div class="row align-center"><label>Z</label><input type="range" id="sz" min="-26.0" max="26.0" step="0.01" value="-20.0"><b id="vz">-20.00</b></div>
+  <div id="sliders-container">
+    <div class="row align-center"><label>X</label><input type="range" id="sx" min="-55.0" max="55.0" step="0.01" value="0"><b id="vx">0.00</b></div>
+    <div class="row align-center"><label>Y</label><input type="range" id="sy" min="0.5" max="100.0" step="0.01" value="10.0"><b id="vy">10.00</b></div>
+    <div class="row align-center"><label>Z</label><input type="range" id="sz" min="-55.0" max="55.0" step="0.01" value="-20.0"><b id="vz">-20.00</b></div>
   </div>
-  
-  <h1 style="margin: 4px -16px 12px; padding: 12px 16px; border-top: 1px solid var(--line); cursor: default;">
+  <h1 id="walle-header" class="panel-header">
     Subject (Wall-E)
     <label class="auto-toggle"><input type="checkbox" id="walle-auto" checked> Auto</label>
   </h1>
-  <div style="font-size: 11px; color: var(--muted); text-align: center; margin-bottom: 0px;">Manual Control: Use W, A, S, D</div>
+</div>
+
+<div id="mobile-controls">
+  <div class="m-btn" id="btn-up">▲</div>
+  <div class="m-btn" id="btn-left">◄</div>
+  <div class="m-btn" id="btn-down">▼</div>
+  <div class="m-btn" id="btn-right">►</div>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -137,8 +165,8 @@
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0xf0f2f5);
   
-  const camera = new THREE.PerspectiveCamera(50, innerWidth/innerHeight, 0.1, 300);
-  camera.position.set(60, 40, 70); 
+  const camera = new THREE.PerspectiveCamera(50, innerWidth/innerHeight, 0.1, 500);
+  camera.position.set(80, 60, 90); 
   
   const renderer = new THREE.WebGLRenderer({antialias:true});
   renderer.setSize(innerWidth, innerHeight);
@@ -149,41 +177,62 @@
   const controls = new THREE.OrbitControls(camera, renderer.domElement);
   controls.enableDamping = true; controls.dampingFactor = 0.08; controls.target.set(0, 10, 0);
 
-  // --- LIGHTING ---
+  // --- LIGHTING & MASSIVE GROUND ---
   const ambient = new THREE.AmbientLight(0x8899aa, 0.7); scene.add(ambient);
-  const key = new THREE.DirectionalLight(0xffffff, 1.0); key.position.set(15, 40, 15); key.castShadow = true; 
-  key.shadow.camera.top = 50; key.shadow.camera.bottom = -50; key.shadow.camera.left = -50; key.shadow.camera.right = 50;
+  const key = new THREE.DirectionalLight(0xffffff, 1.0); key.position.set(15, 60, 15); key.castShadow = true; 
+  key.shadow.camera.top = 70; key.shadow.camera.bottom = -70; key.shadow.camera.left = -70; key.shadow.camera.right = 70;
   scene.add(key);
   const fill = new THREE.DirectionalLight(0x4fb0ff, 0.4); fill.position.set(-20, 20, -20); scene.add(fill);
   
-  const ground = new THREE.Mesh(new THREE.CircleGeometry(60, 64), new THREE.MeshStandardMaterial({color:0xe2e8f0, roughness:0.95}));
+  const ground = new THREE.Mesh(new THREE.CircleGeometry(120, 64), new THREE.MeshStandardMaterial({color:0xe2e8f0, roughness:0.95}));
   ground.rotation.x = -Math.PI/2; ground.receiveShadow = true; scene.add(ground);
-  let grid = new THREE.GridHelper(60, 60, 0xadb5bd, 0xdee2e6); grid.position.y = 0.01; scene.add(grid);
+  let grid = new THREE.GridHelper(120, 120, 0xadb5bd, 0xdee2e6); grid.position.y = 0.01; scene.add(grid);
 
   // --- UI STATE & LOGIC ---
   const sx = document.getElementById('sx'), sy = document.getElementById('sy'), sz = document.getElementById('sz');
   const vx = document.getElementById('vx'), vy = document.getElementById('vy'), vz = document.getElementById('vz');
   
-  // End-Effector Auto Roam
   let isAutoRoam = true; 
   const eeTargetPos = new THREE.Vector3();
   const autoRoamCb = document.getElementById('auto-roam');
   const slidersContainer = document.getElementById('sliders-container');
+  const walleHeader = document.getElementById('walle-header');
+  
+  const pulleyPoints = [];
 
   function pickNewEETarget() {
-    eeTargetPos.set((Math.random() - 0.5) * 40, Math.random() * 20 + 5, (Math.random() - 0.5) * 40);
+    if (pulleyPoints.length < 4) return;
+    
+    // Strict inner clamping calculation to guarantee target is reachable
+    const margin = 2.0; 
+    let minX = Math.max(pulleyPoints[2].x, pulleyPoints[3].x) + margin;
+    let maxX = Math.min(pulleyPoints[0].x, pulleyPoints[1].x) - margin;
+    let minZ = Math.max(pulleyPoints[1].z, pulleyPoints[2].z) + margin;
+    let maxZ = Math.min(pulleyPoints[0].z, pulleyPoints[3].z) - margin;
+
+    if (minX >= maxX) { let mid = (minX + maxX) / 2; minX = mid; maxX = mid; }
+    if (minZ >= maxZ) { let mid = (minZ + maxZ) / 2; minZ = mid; maxZ = mid; }
+
+    let rx = minX + (Math.random() * (maxX - minX));
+    let rz = minZ + (Math.random() * (maxZ - minZ));
+
+    eeTargetPos.set(rx, Math.random() * 20 + 5, rz);
   }
-  pickNewEETarget();
 
   function setAutoRoam(state) {
     isAutoRoam = state;
     autoRoamCb.checked = state;
+    
     slidersContainer.style.display = state ? 'none' : 'block'; 
+    walleHeader.style.borderTop = state ? 'none' : '1px solid var(--line)';
+
     if (isAutoRoam) pickNewEETarget();
     if (sx && sy && sz) updateVirtualScreen(parseFloat(sx.value), parseFloat(sy.value), parseFloat(sz.value));
   }
   autoRoamCb.addEventListener('change', (e) => setAutoRoam(e.target.checked));
-  slidersContainer.style.display = isAutoRoam ? 'none' : 'block'; // Set initial state
+  
+  slidersContainer.style.display = isAutoRoam ? 'none' : 'block';
+  walleHeader.style.borderTop = isAutoRoam ? 'none' : '1px solid var(--line)';
 
   const onPosSlide = () => {
     if (isAutoRoam) setAutoRoam(false); 
@@ -191,7 +240,7 @@
   };
   [sx,sy,sz].forEach(el => el.addEventListener('input', onPosSlide));
 
-  // Wall-E Auto Roam & WASD Controls
+  // Wall-E Auto Roam & Controls
   let isWalleAuto = true;
   const walleAutoCb = document.getElementById('walle-auto');
   
@@ -215,7 +264,25 @@
       if (keys.hasOwnProperty(key)) keys[key] = false;
   });
 
-  // --- SAFE ROUND RECTANGLE HELPER ---
+  // Mobile D-Pad binding
+  function bindTouch(id, keyStr) {
+      const el = document.getElementById(id);
+      const trigger = (state) => (e) => {
+          e.preventDefault(); 
+          keys[keyStr] = state; 
+          if(state && isWalleAuto) setWalleAuto(false); 
+      };
+      el.addEventListener('touchstart', trigger(true), {passive:false});
+      el.addEventListener('touchend', trigger(false), {passive:false});
+      el.addEventListener('mousedown', trigger(true));
+      el.addEventListener('mouseup', trigger(false));
+      el.addEventListener('mouseleave', trigger(false));
+  }
+  bindTouch('btn-up', 'w');
+  bindTouch('btn-down', 's');
+  bindTouch('btn-left', 'a');
+  bindTouch('btn-right', 'd');
+
   function drawSafeRoundRect(ctx, x, y, width, height, radius) {
     ctx.beginPath();
     ctx.moveTo(x + radius, y);
@@ -228,13 +295,13 @@
     ctx.stroke();
   }
 
-  // --- VIRTUAL DISPLAY 1 (COMPACT FLOATING HUD) ---
+  // --- VIRTUAL DISPLAY 1 (ALWAYS SHOWS SLIDERS) ---
   const vCanvas = document.createElement('canvas');
-  vCanvas.width = 1024; vCanvas.height = 560; 
+  vCanvas.width = 1024; vCanvas.height = 576; 
   const ctx = vCanvas.getContext('2d');
   const vTexture = new THREE.CanvasTexture(vCanvas);
   
-  const virtualScreenGeo = new THREE.PlaneGeometry(6.4, 3.5); 
+  const virtualScreenGeo = new THREE.PlaneGeometry(6.4, 3.6); 
   const virtualScreenMat = new THREE.MeshBasicMaterial({ map: vTexture, transparent: true, opacity: 0.95, side: THREE.DoubleSide });
   const virtualScreen = new THREE.Mesh(virtualScreenGeo, virtualScreenMat);
   virtualScreen.position.set(34, 15, 0); 
@@ -245,11 +312,9 @@
     ctx.clearRect(0, 0, vCanvas.width, vCanvas.height);
     ctx.save(); ctx.scale(2, 2);
     
-    // Main UI Box
     ctx.fillStyle = '#16191d'; ctx.strokeStyle = '#2a2f36'; ctx.lineWidth = 2; 
-    drawSafeRoundRect(ctx, 0, 0, 512, 280, 16);
+    drawSafeRoundRect(ctx, 0, 0, 512, 288, 16);
 
-    // Camera Header
     ctx.fillStyle = '#8b939c'; ctx.font = 'bold 16px sans-serif'; ctx.fillText('END-EFFECTOR', 20, 35);
     ctx.font = 'bold 14px sans-serif'; ctx.fillStyle = '#e6e9ec'; ctx.fillText('Auto', 450, 35);
     ctx.strokeStyle = '#8b939c'; ctx.lineWidth = 1; ctx.fillStyle = isAutoRoam ? '#4fb0ff' : 'transparent';
@@ -267,23 +332,17 @@
       ctx.fillStyle = '#e6e9ec'; ctx.font = '16px monospace'; ctx.textAlign = 'right'; ctx.fillText(val.toFixed(2), 492, yOffset); ctx.textAlign = 'left';
     }
     
-    // Virtual screen ALWAYS shows sliders, even if HTML hides them
-    drawSlider('X', x, -26, 26, 95);
-    drawSlider('Y', y, 0.5, 40, 140);
-    drawSlider('Z', z, -26, 26, 185);
+    drawSlider('X', x, -55, 55, 100);
+    drawSlider('Y', y, 0.5, 100, 150);
+    drawSlider('Z', z, -55, 55, 200);
 
-    // Wall-E Section Divider
-    ctx.beginPath(); ctx.moveTo(0, 215); ctx.lineTo(512, 215); ctx.strokeStyle = '#2a2f36'; ctx.stroke();
-    ctx.fillStyle = '#8b939c'; ctx.font = 'bold 16px sans-serif'; ctx.fillText('SUBJECT (WALL-E)', 20, 245);
+    ctx.beginPath(); ctx.moveTo(0, 235); ctx.lineTo(512, 235); ctx.strokeStyle = '#2a2f36'; ctx.stroke();
+    ctx.fillStyle = '#8b939c'; ctx.font = 'bold 16px sans-serif'; ctx.fillText('SUBJECT (WALL-E)', 20, 265);
     
-    // Wall-E Auto Toggle
-    ctx.font = 'bold 14px sans-serif'; ctx.fillStyle = '#e6e9ec'; ctx.fillText('Auto', 450, 245);
+    ctx.font = 'bold 14px sans-serif'; ctx.fillStyle = '#e6e9ec'; ctx.fillText('Auto', 450, 265);
     ctx.strokeStyle = '#8b939c'; ctx.lineWidth = 1; ctx.fillStyle = isWalleAuto ? '#4fb0ff' : 'transparent';
-    drawSafeRoundRect(ctx, 430, 233, 14, 14, 3);
-    if (isWalleAuto) { ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(437, 240, 3, 0, Math.PI*2); ctx.fill(); }
-
-    ctx.fillStyle = '#8b939c'; ctx.font = '12px sans-serif'; ctx.textAlign = 'center';
-    ctx.fillText('Manual Control: W, A, S, D keys', 256, 265);
+    drawSafeRoundRect(ctx, 430, 253, 14, 14, 3);
+    if (isWalleAuto) { ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(437, 260, 3, 0, Math.PI*2); ctx.fill(); }
 
     ctx.restore();
     vTexture.needsUpdate = true;
@@ -343,7 +402,7 @@
   window.addEventListener('mouseup', () => isDraggingHUD = false);
 
   // --- MATERIALS & PARAMS ---
-  const HALF = 25.0; 
+  const HALF = 40.0; 
   const CUBE_SIZE = 1.0; 
   const steelMat = new THREE.MeshStandardMaterial({color:0x555b63, roughness:0.35, metalness:0.85});
   const darkMat = new THREE.MeshStandardMaterial({color:0x2b2f34, roughness:0.5});
@@ -356,7 +415,6 @@
   ];
   
   const pillarsData = [];
-  const pulleyPoints = [];
 
   corners.forEach((c, idx) => {
     const group = new THREE.Group(); group.position.set(c.x, 0, c.z); scene.add(group);
@@ -460,7 +518,7 @@
       walleAction.play();
     }
     
-    walleTargetPos.set((Math.random() - 0.5) * 40, 0, (Math.random() - 0.5) * 40);
+    walleTargetPos.set((Math.random() - 0.5) * 80, 0, (Math.random() - 0.5) * 80);
     scene.add(walleModel);
   });
   
@@ -471,15 +529,18 @@
   const cables = corners.map(() => { const m = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 1, 6), cableMat); scene.add(m); return m; });
 
   function clampPosition(x, y, z) {
-    let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
-    pulleyPoints.forEach(p => {
-      if (p.x < minX) minX = p.x; if (p.x > maxX) maxX = p.x;
-      if (p.z < minZ) minZ = p.z; if (p.z > maxZ) maxZ = p.z;
-    });
-    
     const margin = CUBE_SIZE; 
-    let cx = Math.max(minX + margin, Math.min(maxX - margin, x));
-    let cz = Math.max(minZ + margin, Math.min(maxZ - margin, z));
+    
+    let minX = Math.max(pulleyPoints[2].x, pulleyPoints[3].x) + margin;
+    let maxX = Math.min(pulleyPoints[0].x, pulleyPoints[1].x) - margin;
+    let minZ = Math.max(pulleyPoints[1].z, pulleyPoints[2].z) + margin;
+    let maxZ = Math.min(pulleyPoints[0].z, pulleyPoints[3].z) - margin;
+
+    if (minX > maxX) { let tmp = minX; minX = maxX; maxX = tmp; }
+    if (minZ > maxZ) { let tmp = minZ; minZ = maxZ; maxZ = tmp; }
+
+    let cx = Math.max(minX, Math.min(maxX, x));
+    let cz = Math.max(minZ, Math.min(maxZ, z));
 
     let num = 0, den = 0;
     pulleyPoints.forEach(p => {
@@ -516,8 +577,20 @@
   }
 
   // Initialize
-  pillarsData.forEach((_, i) => updatePillarGeometry(i, 35.0, undefined, undefined));
+  pickNewEETarget();
+  pillarsData.forEach((_, i) => updatePillarGeometry(i, 45.0, undefined, undefined));
   updateVirtualScreen(0, 10, -20); 
+
+  // --- COLLISION DETECTION ---
+  function checkWalleCollision(x, z) {
+      // Adjusted Table Collision Box (Desk extends heavily along Z axis based on model rotation)
+      if (x > 30 && x < 53   && z > -12 && z < 12) return true;
+      
+      for (let i = 0; i < 4; i++) {
+          if (Math.hypot(x - pulleyPoints[i].x, z - pulleyPoints[i].z) < 3.0) return true;
+      }
+      return false;
+  }
 
   // --- TRANSFORM CONTROLS ---
   const tControls = new THREE.TransformControls(camera, renderer.domElement);
@@ -536,9 +609,17 @@
     } 
     else if (tControls.object === pillarHandle && activePillarIndex > -1) {
       let h = pillarHandle.position.y - 0.5;
-      h = Math.max(3.0, Math.min(50.0, h)); 
-      let px = Math.max(-35, Math.min(35, pillarHandle.position.x));
-      let pz = Math.max(-35, Math.min(35, pillarHandle.position.z));
+      h = Math.max(3.0, Math.min(100.0, h)); 
+      
+      let px = pillarHandle.position.x;
+      let pz = pillarHandle.position.z;
+      
+      const GAP = 5.0;
+      if (activePillarIndex === 0) { px = Math.max(GAP, Math.min(55, px)); pz = Math.max(GAP, Math.min(55, pz)); }
+      else if (activePillarIndex === 1) { px = Math.max(GAP, Math.min(55, px)); pz = Math.max(-55, Math.min(-GAP, pz)); }
+      else if (activePillarIndex === 2) { px = Math.max(-55, Math.min(-GAP, px)); pz = Math.max(-55, Math.min(-GAP, pz)); }
+      else if (activePillarIndex === 3) { px = Math.max(-55, Math.min(-GAP, px)); pz = Math.max(GAP, Math.min(55, pz)); }
+
       pillarHandle.position.set(px, h + 0.5, pz);
       updatePillarGeometry(activePillarIndex, h, px, pz);
     }
@@ -549,7 +630,7 @@
   let activePillarIndex = -1;
 
   window.addEventListener('pointerdown', (e) => {
-    if(e.target.closest('.ui-panel') || e.target.closest('#menu-bar') || e.target.closest('#about-modal') || e.target.tagName === 'BUTTON') return;
+    if(e.target.closest('.ui-panel') || e.target.closest('#menu-bar') || e.target.closest('#about-modal') || e.target.closest('#mobile-controls') || e.target.tagName === 'BUTTON') return;
     
     mouse.x = (e.clientX / innerWidth) * 2 - 1; 
     mouse.y = -(e.clientY / innerHeight) * 2 + 1;
@@ -579,8 +660,8 @@
     }
   });
 
-  let isDark = false;
   document.getElementById('btn-theme').addEventListener('click', (e) => {
+    let isDark = document.body.getAttribute('data-theme') === 'dark';
     isDark = !isDark; 
     document.body.setAttribute('data-theme', isDark ? 'dark' : 'light');
     e.target.innerText = isDark ? "Toggle Light Mode" : "Toggle Dark Mode";
@@ -588,18 +669,14 @@
     if (isDark) {
       scene.background.setHex(0x0d0f12);
       ground.material.color.setHex(0x14171b);
-      ambient.intensity = 1.6;  
-      key.intensity = 1.6;
-      fill.intensity = 1.2;
+      ambient.intensity = 1.6; key.intensity = 1.6; fill.intensity = 1.2;
     } else {
       scene.background.setHex(0xf0f2f5);
       ground.material.color.setHex(0xe2e8f0);
-      ambient.intensity = 0.7;
-      key.intensity = 1.0;
-      fill.intensity = 0.4;
+      ambient.intensity = 0.7; key.intensity = 1.0; fill.intensity = 0.4;
     }
     scene.remove(grid);
-    grid = new THREE.GridHelper(60, 60, isDark ? 0x2a2f36 : 0xadb5bd, isDark ? 0x1f2328 : 0xdee2e6);
+    grid = new THREE.GridHelper(120, 120, isDark ? 0x2a2f36 : 0xadb5bd, isDark ? 0x1f2328 : 0xdee2e6);
     grid.position.y = 0.01; scene.add(grid);
   });
 
@@ -610,7 +687,7 @@
     liveRenderTarget.setSize(Math.floor(innerWidth / 2), Math.floor(innerHeight / 2));
   });
 
-  // --- RENDER LOOP WITH LOCAL MOVEMENT & ANIMATION SYNC ---
+  // --- RENDER LOOP WITH LOCAL MOVEMENT, COLLISIONS & ANIMATION SYNC ---
   const clock = new THREE.Clock();
   const walleDummy = new THREE.Object3D(); 
 
@@ -624,7 +701,6 @@
     if (walleModel && walleMixer && walleAction) {
       
       if (!isWalleAuto) {
-          // Manual WASD Object-Centric (Local) Movement
           let isMoving = false;
           let moveSpeed = 0;
           
@@ -632,30 +708,29 @@
           if (keys.s) { moveSpeed = -10.0; isMoving = true; }
           
           if (isMoving) {
-              // Play animation forward or backward
               walleAction.timeScale = moveSpeed > 0 ? 1 : -1;
               walleMixer.update(delta);
               
-              // Car-like steering logic (only turn when moving)
               let turnDirection = 0;
-              if (keys.a) turnDirection = 1;  // Inverted to fix left steering
-              if (keys.d) turnDirection = -1;   // Inverted to fix right steering
+              if (keys.a) turnDirection = 1;  
+              if (keys.d) turnDirection = -1;   
               
               if (turnDirection !== 0) {
-                  // Reversing steering direction when backing up for realistic car feel
                   let steerFactor = moveSpeed > 0 ? 1 : -1;
                   walleModel.rotateY(turnDirection * steerFactor * 2.0 * delta);
               }
               
-              // Move physically forward/backward in local space
-              walleModel.translateZ(moveSpeed * delta); // Inverted Z sign to fix W/S
+              let oldPos = walleModel.position.clone();
+              walleModel.translateZ(moveSpeed * delta); 
               
-              // Clamp to Grid
-              walleModel.position.x = Math.max(-30, Math.min(30, walleModel.position.x));
-              walleModel.position.z = Math.max(-30, Math.min(30, walleModel.position.z));
+              if (checkWalleCollision(walleModel.position.x, walleModel.position.z)) {
+                  walleModel.position.copy(oldPos); 
+              } else {
+                  walleModel.position.x = Math.max(-55, Math.min(55, walleModel.position.x));
+                  walleModel.position.z = Math.max(-55, Math.min(55, walleModel.position.z));
+              }
           }
       } else {
-          // Auto Roam Movement
           walleAction.timeScale = 1;
           walleMixer.update(delta);
           
@@ -663,24 +738,29 @@
           const dist = currentPos.distanceTo(walleTargetPos);
           
           if (dist < 0.1) {
-            walleTargetPos.set((Math.random() - 0.5) * 40, 0, (Math.random() - 0.5) * 40);
+            walleTargetPos.set((Math.random() - 0.5) * 80, 0, (Math.random() - 0.5) * 80);
           } else {
             const dir = new THREE.Vector3().subVectors(walleTargetPos, currentPos).normalize();
             const step = 2.0 * delta; 
             
+            let nextPos = currentPos.clone();
             if (step >= dist) {
-              walleModel.position.copy(walleTargetPos);
+              nextPos.copy(walleTargetPos);
             } else {
-              walleModel.position.add(dir.multiplyScalar(step));
+              nextPos.add(dir.multiplyScalar(step));
             }
             
-            walleDummy.position.copy(currentPos);
-            walleDummy.lookAt(walleTargetPos);
-            walleModel.quaternion.slerp(walleDummy.quaternion, 5.0 * delta);
+            if (checkWalleCollision(nextPos.x, nextPos.z)) {
+                walleTargetPos.set((Math.random() - 0.5) * 80, 0, (Math.random() - 0.5) * 80);
+            } else {
+                walleModel.position.copy(nextPos);
+                walleDummy.position.copy(currentPos);
+                walleDummy.lookAt(walleTargetPos);
+                walleModel.quaternion.slerp(walleDummy.quaternion, 5.0 * delta);
+            }
           }
       }
 
-      // SpiderCam continuously tracks Wall-E
       if (gimbal) {
         const targetFocus = walleModel.position.clone();
         targetFocus.y += 1.0; 
@@ -688,7 +768,6 @@
       }
     }
     
-    // Auto-Roam Logic for Camera Rig
     if (isAutoRoam) {
       const currentPos = endEffector.position;
       const dist = currentPos.distanceTo(eeTargetPos);
@@ -708,7 +787,6 @@
     }
 
     controls.update(); 
-
     liveLaptopScreen.visible = false; 
     camScreen.visible = false;
 
