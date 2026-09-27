@@ -261,12 +261,12 @@
 
   // --- VIRTUAL DISPLAY 3 (LIVE LAPTOP SCREEN) ---
   const liveRenderTarget = new THREE.WebGLRenderTarget(Math.floor(innerWidth / 2), Math.floor(innerHeight / 2));
-  const laptopScreenGeo = new THREE.PlaneGeometry(5.65, 3.8); 
+  const laptopScreenGeo = new THREE.PlaneGeometry(5.67, 3.3); 
   const laptopScreenMat = new THREE.MeshBasicMaterial({ map: liveRenderTarget.texture, side: THREE.DoubleSide });
   const liveLaptopScreen = new THREE.Mesh(laptopScreenGeo, laptopScreenMat);
   
   liveLaptopScreen.rotation.order = "YXZ"; 
-  liveLaptopScreen.position.set(36.12, 10.5, 0.26); 
+  liveLaptopScreen.position.set(35.9, 10.45, 0.26); 
   liveLaptopScreen.rotation.y = Math.PI / 2; 
   liveLaptopScreen.rotation.x = -0.38;       
   scene.add(liveLaptopScreen);
