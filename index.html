@@ -88,23 +88,29 @@
   input[type=range] { -webkit-appearance:none; height:4px; border-radius:2px; background:var(--line); outline:none; }
   input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:14px; height:14px; border-radius:50%; background:var(--accent); cursor:pointer; }
 
-  /* Mobile Onscreen D-Pad */
-  #mobile-controls {
-    position: absolute; bottom: 24px; right: 24px;
-    display: grid; grid-template-columns: 50px 50px 50px; grid-template-rows: 50px 50px; gap: 6px;
-    z-index: 100;
+  /* Mobile Onscreen D-Pad (Hidden by default) */
+  #mobile-controls-left, #mobile-controls-right {
+    display: none; /* Only reveals via JS if on Mobile AND Manual Mode */
+    position: absolute; bottom: 32px;
+    z-index: 100; gap: 10px;
+  }
+  #mobile-controls-left {
+    left: 32px;
+    flex-direction: column;
+  }
+  #mobile-controls-right {
+    right: 32px;
+    flex-direction: row;
+    align-items: flex-end;
   }
   .m-btn {
     background: var(--panel); border: 1px solid var(--line); color: var(--text);
-    border-radius: 8px; font-size: 20px; display: flex; align-items: center; justify-content: center;
+    border-radius: 12px; font-size: 24px; display: flex; align-items: center; justify-content: center;
+    width: 60px; height: 60px;
     user-select: none; touch-action: none; cursor: pointer; opacity: 0.8;
     box-shadow: 0 4px 12px rgba(0,0,0,0.15);
   }
   .m-btn:active { background: var(--accent); color: #fff; opacity: 1; }
-  #btn-up { grid-column: 2; grid-row: 1; }
-  #btn-left { grid-column: 1; grid-row: 2; }
-  #btn-down { grid-column: 2; grid-row: 2; }
-  #btn-right { grid-column: 3; grid-row: 2; }
 </style>
 </head>
 <body data-theme="light">
@@ -121,7 +127,7 @@
 <div id="about-modal">
   <h2>About SpiderCam</h2>
   <p>This is a 3D Cable-Driven Parallel Robot (CDPR) simulation. You can freely adjust the environment's anchor pillars, maneuver the central end-effector (camera), and watch it automatically track targets using real-time physics constraints.</p>
-  <p><strong>Manual Control:</strong> Toggle 'Auto' off in the Wall-E panel, then use the <b>W, A, S, D</b> keys (or the onscreen D-Pad) to drive him manually. Wall-E will properly collide with the pillars and desk!</p>
+  <p><strong>Manual Control:</strong> Toggle 'Auto' off in the Wall-E panel, then use the <b>W, A, S, D</b> keys (or the onscreen D-Pad on mobile) to drive him manually. Wall-E will properly collide with the pillars and desk!</p>
   <button class="close-btn" id="btn-close-about">Close</button>
 </div>
 
@@ -141,10 +147,13 @@
   </h1>
 </div>
 
-<div id="mobile-controls">
+<!-- Mobile Controls Split -->
+<div id="mobile-controls-left">
   <div class="m-btn" id="btn-up">▲</div>
-  <div class="m-btn" id="btn-left">◄</div>
   <div class="m-btn" id="btn-down">▼</div>
+</div>
+<div id="mobile-controls-right">
+  <div class="m-btn" id="btn-left">◄</div>
   <div class="m-btn" id="btn-right">►</div>
 </div>
 
@@ -203,7 +212,6 @@
   function pickNewEETarget() {
     if (pulleyPoints.length < 4) return;
     
-    // Strict inner clamping calculation to guarantee target is reachable
     const margin = 2.0; 
     let minX = Math.max(pulleyPoints[2].x, pulleyPoints[3].x) + margin;
     let maxX = Math.min(pulleyPoints[0].x, pulleyPoints[1].x) - margin;
@@ -240,16 +248,32 @@
   };
   [sx,sy,sz].forEach(el => el.addEventListener('input', onPosSlide));
 
-  // Wall-E Auto Roam & Controls
+  // Wall-E Auto Roam & Mobile Controls
   let isWalleAuto = true;
   const walleAutoCb = document.getElementById('walle-auto');
+  const mobileControlsLeft = document.getElementById('mobile-controls-left');
+  const mobileControlsRight = document.getElementById('mobile-controls-right');
+  const isMobile = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
   
   function setWalleAuto(state) {
       isWalleAuto = state;
       walleAutoCb.checked = state;
       if (sx && sy && sz) updateVirtualScreen(parseFloat(sx.value), parseFloat(sy.value), parseFloat(sz.value));
+      
+      // Reveal D-Pad ONLY on touch devices when manual mode is active
+      if (isMobile && !isWalleAuto) {
+          mobileControlsLeft.style.display = 'flex';
+          mobileControlsRight.style.display = 'flex';
+      } else {
+          mobileControlsLeft.style.display = 'none';
+          mobileControlsRight.style.display = 'none';
+      }
   }
   walleAutoCb.addEventListener('change', (e) => setWalleAuto(e.target.checked));
+  
+  // Init mobile visibility state
+  mobileControlsLeft.style.display = (isMobile && !isWalleAuto) ? 'flex' : 'none';
+  mobileControlsRight.style.display = (isMobile && !isWalleAuto) ? 'flex' : 'none';
 
   const keys = { w: false, a: false, s: false, d: false };
   window.addEventListener('keydown', (e) => {
@@ -366,7 +390,7 @@
       side: THREE.DoubleSide 
   });
   const camScreen = new THREE.Mesh(camScreenGeo, camScreenMat);
-  camScreen.position.set(34, 15, -6.8); 
+  camScreen.position.set(35, 15, -6.8); 
   camScreen.rotation.y = (Math.PI / 2) - 0.25; 
   scene.add(camScreen);
 
@@ -536,8 +560,8 @@
     let minZ = Math.max(pulleyPoints[1].z, pulleyPoints[2].z) + margin;
     let maxZ = Math.min(pulleyPoints[0].z, pulleyPoints[3].z) - margin;
 
-    if (minX > maxX) { let tmp = minX; minX = maxX; maxX = tmp; }
-    if (minZ > maxZ) { let tmp = minZ; minZ = maxZ; maxZ = tmp; }
+    if (minX >= maxX) { let mid = (minX + maxX) / 2; minX = mid; maxX = mid; }
+    if (minZ >= maxZ) { let mid = (minZ + maxZ) / 2; minZ = mid; maxZ = mid; }
 
     let cx = Math.max(minX, Math.min(maxX, x));
     let cz = Math.max(minZ, Math.min(maxZ, z));
@@ -583,7 +607,6 @@
 
   // --- COLLISION DETECTION ---
   function checkWalleCollision(x, z) {
-      // Adjusted Table Collision Box (Desk extends heavily along Z axis based on model rotation)
       if (x > 30 && x < 53   && z > -12 && z < 12) return true;
       
       for (let i = 0; i < 4; i++) {
@@ -630,10 +653,13 @@
   let activePillarIndex = -1;
 
   window.addEventListener('pointerdown', (e) => {
-    if(e.target.closest('.ui-panel') || e.target.closest('#menu-bar') || e.target.closest('#about-modal') || e.target.closest('#mobile-controls') || e.target.tagName === 'BUTTON') return;
+    if(e.target.closest('.ui-panel') || e.target.closest('#menu-bar') || e.target.closest('#about-modal') || e.target.closest('#mobile-controls-left') || e.target.closest('#mobile-controls-right') || e.target.tagName === 'BUTTON') return;
     
-    mouse.x = (e.clientX / innerWidth) * 2 - 1; 
-    mouse.y = -(e.clientY / innerHeight) * 2 + 1;
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    
+    mouse.x = (clientX / innerWidth) * 2 - 1; 
+    mouse.y = -(clientY / innerHeight) * 2 + 1;
     raycaster.setFromCamera(mouse, camera);
     const intersects = raycaster.intersectObjects(scene.children, true);
     
